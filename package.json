@@ -1,0 +1,93 @@
+{
+  "name": "fen-lense",
+  "displayName": "fen lense",
+  "description": "Preview a chess position when hovering above a valid FEN string",
+  "publisher": "dullptr",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/PatrickTorgerson/fenlense.git"
+  },
+  "version": "0.1.0",
+  "engines": {
+    "vscode": "^1.77.0"
+  },
+  "categories": [
+    "Other",
+    "Visualization"
+  ],
+  "keywords": [
+    "chess",
+    "hover",
+    "fen"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "capabilities": {
+      "hoverProvider": "true"
+    },
+    "configuration": {
+        "title": "fen lense",
+        "properties": {
+            "fenlense.showCastlingRights": {
+                "type": "boolean",
+                "default": true,
+                "description": "Show indicators for who can castle and in wich direction"
+            },
+            "fenlense.showEnpassantSquare": {
+                "type": "boolean",
+                "default": false,
+                "description": "Show Indicatetor for En Passant target square"
+            },
+            "fenlense.lightSquareColor": {
+                "type": "string",
+                "default": "#F0D9B5",
+                "description": "Color of light squares as RGB hex color code"
+            },
+            "fenlense.darkSquareColor": {
+                "type": "string",
+                "default": "#B58863",
+                "description": "Color of dark squares as RGB hex color code"
+            },
+            "fenlense.castlingRightsColor": {
+                "type": "string",
+                "default": "#FF7F27",
+                "description": "Color of castling rights indicators as RGB hex color code"
+            },
+            "fenlense.enPassantSquareColor": {
+                "type": "string",
+                "default": "#99D9EA",
+                "description": "Color of En Passant square indicator as RGB hex color code"
+            }
+        }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile && npm run lint",
+    "lint": "eslint src --ext ts",
+    "test": "node ./out/test/runTest.js"
+  },
+  "devDependencies": {
+    "@types/glob": "^8.1.0",
+    "@types/mocha": "^10.0.1",
+    "@types/node": "16.x",
+    "@types/sharp": "^0.31.0",
+    "@types/vscode": "^1.77.0",
+    "@typescript-eslint/eslint-plugin": "^5.56.0",
+    "@typescript-eslint/parser": "^5.56.0",
+    "@vscode/test-electron": "^2.3.0",
+    "eslint": "^8.36.0",
+    "glob": "^8.1.0",
+    "mocha": "^10.2.0",
+    "typescript": "^4.9.5"
+  },
+  "dependencies": {
+    "sharp": "^0.31.0",
+    "typescript-base64-arraybuffer": "^0.1.0"
+  }
+}
