@@ -8,7 +8,7 @@
     "type": "git",
     "url": "https://github.com/PatrickTorgerson/fenlense.git"
   },
-  "version": "0.1.0",
+  "version": "0.1.1",
   "engines": {
     "vscode": "^1.77.0"
   },
@@ -30,39 +30,39 @@
       "hoverProvider": "true"
     },
     "configuration": {
-        "title": "fen lense",
-        "properties": {
-            "fenlense.showCastlingRights": {
-                "type": "boolean",
-                "default": true,
-                "description": "Show indicators for who can castle and in wich direction"
-            },
-            "fenlense.showEnpassantSquare": {
-                "type": "boolean",
-                "default": false,
-                "description": "Show Indicatetor for En Passant target square"
-            },
-            "fenlense.lightSquareColor": {
-                "type": "string",
-                "default": "#F0D9B5",
-                "description": "Color of light squares as RGB hex color code"
-            },
-            "fenlense.darkSquareColor": {
-                "type": "string",
-                "default": "#B58863",
-                "description": "Color of dark squares as RGB hex color code"
-            },
-            "fenlense.castlingRightsColor": {
-                "type": "string",
-                "default": "#FF7F27",
-                "description": "Color of castling rights indicators as RGB hex color code"
-            },
-            "fenlense.enPassantSquareColor": {
-                "type": "string",
-                "default": "#99D9EA",
-                "description": "Color of En Passant square indicator as RGB hex color code"
-            }
+      "title": "fen lense",
+      "properties": {
+        "fenlense.showCastlingRights": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show indicators for who can castle and in wich direction"
+        },
+        "fenlense.showEnpassantSquare": {
+          "type": "boolean",
+          "default": false,
+          "description": "Show Indicatetor for En Passant target square"
+        },
+        "fenlense.lightSquareColor": {
+          "type": "string",
+          "default": "#F0D9B5",
+          "description": "Color of light squares as RGB hex color code"
+        },
+        "fenlense.darkSquareColor": {
+          "type": "string",
+          "default": "#B58863",
+          "description": "Color of dark squares as RGB hex color code"
+        },
+        "fenlense.castlingRightsColor": {
+          "type": "string",
+          "default": "#FF7F27",
+          "description": "Color of castling rights indicators as RGB hex color code"
+        },
+        "fenlense.enPassantSquareColor": {
+          "type": "string",
+          "default": "#99D9EA",
+          "description": "Color of En Passant square indicator as RGB hex color code"
         }
+      }
     }
   },
   "scripts": {
