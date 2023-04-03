@@ -3,6 +3,7 @@
   "displayName": "fen lense",
   "description": "Preview a chess position when hovering above a valid FEN string",
   "publisher": "dullptr",
+  "icon": "./img/logo.png",
   "repository": {
     "type": "git",
     "url": "https://github.com/PatrickTorgerson/fenlense.git"
