@@ -1,15 +1,17 @@
 
 import * as vscode from 'vscode';
-import { Lense, ok, hexToColor, Color, Palette } from './fenlense';
+import { Lense, ok, isValidHex, Palette } from './fenlense';
 
 
 export function activate(context: vscode.ExtensionContext) {
     console.log('Congratulations, your extension "fen-lense" is now active!');
 
-    let def_light: Color = [240, 217, 181];
-    let def_dark: Color = [181, 136, 99];
-    let def_castle: Color = [255, 127, 39];
-    let def_enpassant: Color = [153, 217, 234];
+    // "8/5k2/3p4/1p1Pp2p/pP2Pp1P/P4P1K/8/8 b - - 99 50"
+
+    let def_light: string = "#f0d9b5";
+    let def_dark: string = "#b58863";
+    let def_castle: string = "#ff7f27";
+    let def_enpassant: string = "#99d9ea";
     let color_light = vscode.workspace.getConfiguration("fenlense").get<string>("lightSquareColor", "");
     let color_dark = vscode.workspace.getConfiguration("fenlense").get<string>("darkSquareColor", "");
     let color_castle = vscode.workspace.getConfiguration("fenlense").get<string>("castlingRightsColor", "");
@@ -18,10 +20,10 @@ export function activate(context: vscode.ExtensionContext) {
     let show_enpassant = vscode.workspace.getConfiguration("fenlense").get<boolean>("showEnpassantSquare", true);
 
     let palette: Palette = {
-        dark: hexToColor(color_dark, def_dark),
-        light: hexToColor(color_light, def_light),
-        castle: hexToColor(color_castle, def_castle),
-        enpassant: hexToColor(color_enpassant, def_enpassant),
+        dark: isValidHex(color_dark) ? color_dark : def_dark,
+        light: isValidHex(color_light) ? color_light : def_light,
+        castle: isValidHex(color_castle) ? color_castle : def_castle,
+        enpassant: isValidHex(color_enpassant) ? color_enpassant : def_enpassant,
     };
 
     // build game board tile

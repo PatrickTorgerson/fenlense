@@ -1,8 +1,7 @@
 import { Position, TextDocument } from "vscode";
-import * as images from './images';
+import { Images } from './images';
 import { encode } from 'typescript-base64-arraybuffer';
-
-const sharp = require('sharp');
+import Jimp from "jimp";
 
 // a pop should appear for a string like this: "8/5k2/3p4/1p1Pp2p/pP2Pp1P/P4P1K/8/8 b - - 99 50"
 
@@ -29,6 +28,7 @@ export const enum PieceType {
 }
 
 class Piece {
+    private static images: Images = new Images();
     public type: PieceType;
     public color: PieceColor;
 
@@ -37,26 +37,32 @@ class Piece {
         this.color = color;
     }
 
-    public getPngBuffer() {
+    public async getJimp() {
         switch(this.type) {
             case PieceType.BISHOP:
-                return this.color == PieceColor.WHITE ? images.white_bishop : images.black_bishop;
-                break;
+                return this.color == PieceColor.WHITE ?
+                    await Piece.images.whiteBishop() :
+                    await Piece.images.blackBishop();
             case PieceType.KING:
-                return this.color == PieceColor.WHITE ? images.white_king : images.black_king;
-                break;
+                return this.color == PieceColor.WHITE ?
+                    await Piece.images.whiteKing() :
+                    await Piece.images.blackKing();
             case PieceType.PAWN:
-                return this.color == PieceColor.WHITE ? images.white_pawn : images.black_pawn;
-                break;
+                return this.color == PieceColor.WHITE ?
+                    await Piece.images.whitePawn() :
+                    await Piece.images.blackPawn();
             case PieceType.KNIGHT:
-                return this.color == PieceColor.WHITE ? images.white_knight : images.black_knight;
-                break;
+                return this.color == PieceColor.WHITE ?
+                    await Piece.images.whiteKnight() :
+                    await Piece.images.blackKnight();
             case PieceType.QUEEN:
-                return this.color == PieceColor.WHITE ? images.white_queen : images.black_queen;
-                break;
+                return this.color == PieceColor.WHITE ?
+                    await Piece.images.whiteQueen() :
+                    await Piece.images.blackQueen();
             case PieceType.ROOK:
-                return this.color == PieceColor.WHITE ? images.white_rook : images.black_rook;
-                break;
+                return this.color == PieceColor.WHITE ?
+                    await Piece.images.whiteRook() :
+                    await Piece.images.blackRook();
         }
     }
 }
@@ -72,34 +78,27 @@ class Board {
     }
 }
 
-export type Color = [number, number, number];
 
-export function hexToColor(hex: string, def: Color): Color {
+export function isValidHex(hex: string): boolean {
     hex.toLowerCase();
     var result = /^#([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-    if (result === null)
-        return def;
-    return [
-        parseInt(result[1], 16),
-        parseInt(result[2], 16),
-        parseInt(result[3], 16)
-    ];
+    return !(result === null);
 }
 
 export class Palette {
-    public dark: Color = [0,0,0];
-    public light: Color = [0,0,0];
-    public castle: Color = [0,0,0];
-    public enpassant: Color = [0,0,0];
+    public dark: string = "";
+    public light: string = "";
+    public castle: string = "";
+    public enpassant: string = "";
 }
 
 export class Lense {
     private tileSize: number;
     private palette: Palette;
-    private background: Option<ArrayBuffer>;
-    private castlingMarker: Option<ArrayBuffer>;
-    private enpassantTile: Option<ArrayBuffer>;
-    private lightTile: Option<ArrayBuffer>;
+    private background: Option<Jimp>;
+    private castlingMarker: Option<Jimp>;
+    private enpassantTile: Option<Jimp>;
+    private lightTile: Option<Jimp>;
     private showCastling: boolean;
     private showEnpassant: boolean;
 
@@ -137,171 +136,113 @@ export class Lense {
                 break;
             default:
                 return null;
-                break;
         }
         return new Piece(type, color);
     }
 
-    private async getBoardEnPassantPngBuffer() {
+    private async getBoardEnPassant() {
         if(issome(this.enpassantTile)) {
             return this.enpassantTile;
         }
-        let enpassantTile = await sharp({
-            create: {
-                width: this.tileSize,
-                height: this.tileSize,
-                channels: 4,
-                background: {
-                    r: this.palette.enpassant[0],
-                    g: this.palette.enpassant[1],
-                    b: this.palette.enpassant[2],
-                    alpha: 1
-                }
-            }
-        }).png().toBuffer();
+        let enpassantTile = new Jimp(this.tileSize, this.tileSize, this.palette.enpassant);
         this.enpassantTile = enpassantTile;
         return enpassantTile;
     }
 
-    private async getBoardCastlingMarkerPngBuffer() {
+    private async getBoardCastlingMarker() {
         if(issome(this.castlingMarker)) {
             return this.castlingMarker;
         }
-        let castlingMarker = await sharp({
-            create: {
-                width: Math.round(this.tileSize/4),
-                height: Math.round(this.tileSize/4),
-                channels: 4,
-                background: {
-                    r: this.palette.castle[0],
-                    g: this.palette.castle[1],
-                    b: this.palette.castle[2],
-                    alpha: 1
-                }
-            }
-        }).png().toBuffer();
+        const size = Math.round(this.tileSize/4);
+        let castlingMarker = new Jimp(size, size, this.palette.castle);
         this.castlingMarker = castlingMarker;
         return castlingMarker;
     }
 
-    private async getBoardLightTilePngBuffer() {
+    private async getBoardLightTile() {
         if(issome(this.lightTile)) {
             return this.lightTile;
         }
-        let lightTile = await sharp({
-            create: {
-                width: this.tileSize,
-                height: this.tileSize,
-                channels: 4,
-                background: {
-                    r: this.palette.light[0],
-                    g: this.palette.light[1],
-                    b: this.palette.light[2],
-                    alpha: 1
-                }
-            }
-        }).png().toBuffer();
+        let lightTile = new Jimp(this.tileSize, this.tileSize, this.palette.light);
         this.lightTile = lightTile
         return lightTile;
     }
 
-    private async getBoardBackgroundPngBuffer() {
+    private async getCheckerboardBackground() {
         if(issome(this.background)) {
             return this.background;
         }
-        let background = await sharp({
-            create: {
-                width: this.tileSize * 8,
-                height: this.tileSize * 8,
-                channels: 4,
-                background: {
-                    r: this.palette.dark[0],
-                    g: this.palette.dark[1],
-                    b: this.palette.dark[2],
-                    alpha: 1
-                }
-            }
-        }).png().toBuffer();
-        let lightTiles = [];
+
+        let background = new Jimp(this.tileSize * 8, this.tileSize * 8, this.palette.dark);
+
         for(let i = 0; i < 8; i++) {
             for(let j = (i & 1); j < 8; j+=2) {
-                lightTiles.push({
-                        input: new Uint8Array(await this.getBoardLightTilePngBuffer()),
-                        top: i * this.tileSize,
-                        left: j * this.tileSize
-                    })
+                background.composite(
+                    await this.getBoardLightTile(),
+                    i * this.tileSize,
+                    j * this.tileSize);
             }
         }
-        this.background = await sharp(background)
-            .composite(lightTiles)
-            .png()
-            .toBuffer();
+
+        this.background = background;
         return this.background;
     }
 
     private async boardBackground(enpassant: Option<[number, number]>, castling: string) {
-        let compositions = [];
+        let checkerboard = await this.getCheckerboardBackground();
+
+        // en passant
         if(issome(enpassant) && this.showEnpassant) {
-            compositions.push({
-                input: await this.getBoardEnPassantPngBuffer(),
-                top: (7 - enpassant[0]) * this.tileSize,
-                left: enpassant[1] * this.tileSize
-            })
+            checkerboard.composite(
+                await this.getBoardEnPassant(),
+                enpassant[1] * this.tileSize,
+                (7 - enpassant[0]) * this.tileSize,
+            );
         }
+
         // castling
         if(castling.includes("q") && this.showCastling) {
-            compositions.push({
-                input: await this.getBoardCastlingMarkerPngBuffer(),
-                top: 0,
-                left: 0
-            })
+            checkerboard.composite(
+                await this.getBoardCastlingMarker(),
+                0,0
+            );
         }
         if(castling.includes("k") && this.showCastling) {
-            compositions.push({
-                input: await this.getBoardCastlingMarkerPngBuffer(),
-                top: 0,
-                left: 7 * this.tileSize
-            })
+            checkerboard.composite(
+                await this.getBoardCastlingMarker(),
+                7 * this.tileSize, 0
+            );
         }
         if(castling.includes("Q") && this.showCastling) {
-            compositions.push({
-                input: await this.getBoardCastlingMarkerPngBuffer(),
-                top: 7 * this.tileSize,
-                left: 0
-            })
+            checkerboard.composite(
+                await this.getBoardCastlingMarker(),
+                0, 7 * this.tileSize
+            );
         }
         if(castling.includes("K") && this.showCastling) {
-            compositions.push({
-                input: await this.getBoardCastlingMarkerPngBuffer(),
-                top: 7 * this.tileSize,
-                left: 7 * this.tileSize
-            })
+            checkerboard.composite(
+                await this.getBoardCastlingMarker(),
+                7 * this.tileSize, 7 * this.tileSize
+            );
         }
-        return await sharp(await this.getBoardBackgroundPngBuffer())
-            .composite(compositions)
-            .png()
-            .toBuffer();
-    }
-
-    public async getCompositeArgument(pieces: Array<any>, piece: Option<Piece>, i: number, j: number) {
-        if(issome(piece)) {
-            pieces.push({
-                input: await piece.getPngBuffer(),
-                top: i * this.tileSize,
-                left: j * this.tileSize
-            })
-        }
+        return await checkerboard;
     }
 
     public async populateBoard(board: Board) {
         let background = await this.boardBackground(board.enpassant, board.castling);
-        let pieces : Array<any> = [];
         for(let i = 0; i < 8; i++) {
             for(let j = 0; j < 8; j++) {
-                await this.getCompositeArgument(pieces, board.pieces[i][j], i, j);
+                if(issome(board.pieces[i][j])) {
+                    const piece = board.pieces[i][j];
+                    background.composite(
+                        await await piece?.getJimp()!,
+                        j * this.tileSize,
+                        i * this.tileSize,
+                    );
+                }
             }
         }
-        return encode(await sharp(background).composite(pieces).png().toBuffer());
+        return encode(await background.getBufferAsync(Jimp.MIME_PNG));
     }
 
     private isUpper(str: String) {
