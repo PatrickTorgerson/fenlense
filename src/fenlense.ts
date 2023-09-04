@@ -2,6 +2,7 @@ import { Position, TextDocument } from "vscode";
 import { Images } from './images';
 import { encode } from 'typescript-base64-arraybuffer';
 import Jimp from "jimp";
+import { truncate } from "fs/promises";
 
 // a pop should appear for a string like this: "8/5k2/3p4/1p1Pp2p/pP2Pp1P/P4P1K/8/8 b - - 99 50"
 
@@ -67,17 +68,26 @@ class Piece {
     }
 }
 
+type Pieces = [Option<Piece>, ...Option<Piece>[]] & { length: 64 };
+const empty_piece_buffer: Pieces = [null,null,null,null,null,null,null,null,
+                                    null,null,null,null,null,null,null,null,
+                                    null,null,null,null,null,null,null,null,
+                                    null,null,null,null,null,null,null,null,
+                                    null,null,null,null,null,null,null,null,
+                                    null,null,null,null,null,null,null,null,
+                                    null,null,null,null,null,null,null,null,
+                                    null,null,null,null,null,null,null,null]
+
 class Board {
-    public pieces: Array<Array<Option<Piece>>>;
+    public pieces: Pieces;
     public castling: string;
     public enpassant: Option<[number, number]>;
-    constructor(pieces: Array<Array<Option<Piece>>>, castling: string, enpassant: Option<[number, number]>) {
+    constructor(pieces: Pieces, castling: string, enpassant: Option<[number, number]>) {
         this.pieces = pieces;
         this.castling = castling;
         this.enpassant = enpassant;
     }
 }
-
 
 export function isValidHex(hex: string): boolean {
     hex.toLowerCase();
@@ -189,14 +199,18 @@ export class Lense {
     }
 
     private async boardBackground(enpassant: Option<[number, number]>, castling: string) {
-        let checkerboard = await this.getCheckerboardBackground();
+        let checkerboard = new Jimp(this.tileSize * 8, this.tileSize * 8, this.palette.dark);
+        checkerboard.composite(
+            await this.getCheckerboardBackground(),
+            0,0
+        )
 
         // en passant
         if(issome(enpassant) && this.showEnpassant) {
             checkerboard.composite(
                 await this.getBoardEnPassant(),
-                enpassant[1] * this.tileSize,
-                (7 - enpassant[0]) * this.tileSize,
+                enpassant[0] * this.tileSize,
+                (7 - enpassant[1]) * this.tileSize,
             );
         }
 
@@ -230,17 +244,15 @@ export class Lense {
 
     public async populateBoard(board: Board) {
         let background = await this.boardBackground(board.enpassant, board.castling);
-        for(let i = 0; i < 8; i++) {
-            for(let j = 0; j < 8; j++) {
-                if(issome(board.pieces[i][j])) {
-                    const piece = board.pieces[i][j];
+        for(let i = 0; i < 64; i++) {
+                if(issome(board.pieces[i])) {
+                    const piece = board.pieces[i];
                     background.composite(
-                        await await piece?.getJimp()!,
-                        j * this.tileSize,
-                        i * this.tileSize,
+                        await piece?.getJimp()!,
+                        (i % 8) * this.tileSize,
+                        Math.trunc(i / 8) * this.tileSize,
                     );
                 }
-            }
         }
         return encode(await background.getBufferAsync(Jimp.MIME_PNG));
     }
@@ -249,96 +261,178 @@ export class Lense {
         return str.toUpperCase() == str;
     }
 
-    private parseFen(str: String) : Result<Board> {
-        let rows = str.split(/ (.*)/s);
-        if (rows.length != 3) return new Error("invalid fen string");
-        rows = [rows[0], rows[1]];
-        let attrs = rows[1].split(' ');
-        rows = rows[0].split('/');
-        if (rows.length != 8 || attrs.length != 5) new Error("invalid fen string");
-        if(!(attrs[2] == "-" || attrs[2].length == 2)) {
-            return new Error("invalid enpassant");
-        }
-        // create empty matrix
-        let board : any = []
-        for(let i = 0; i < 8; i++) {
-            board.push([])
-            for(let j = 0; j < 8; j++) {
-                board[i].push( null );
-            }
-        }
-        for(let i = 0; i < rows.length; i++) {
-            let j = 0;
-            for(let ci = 0; ci < rows[i].length; ci++) {
-                let c = rows[i][ci];
-                if("PNBRQK".includes(c.toUpperCase())) {
-                    let color = PieceColor.BLACK;
-                    if( this.isUpper(c) ) {
-                        color = PieceColor.WHITE;
-                    }
-                    let piece = Lense.charToPiece(c.toUpperCase(), color);
-                    board[i][j] = piece;
-                    j++;
-                } else if("12345678".includes(c)) {
-                    j += Number(c);
-                    if(j > 8) return new Error("Invalid row sum");
-                } else {
-                    return new Error("Invalid FEN string character");
-                }
-            }
-            if(j!=8) return new Error("invalid fen string");
+    /// parse fen into Position
+    /// lieniant parsing:
+    ///  - arbitrary number of delimiting spaces
+    ///  - duplicate castling rights ignored
+    ///  - leading single quotes and double quotes ignored
+    ///  - trailing single quotes and double quotes ignored
+    private parseFen(fen: String) : Result<Board> {
+
+
+        let board = new Board(empty_piece_buffer, "", null);
+
+        let fen_index: number = 0;
+        while (fen_index < fen.length && fen[fen_index] == ' ')
+            fen_index += 1;
+        if (fen_index >= fen.length)
+            return new Error("! missing fields");
+
+        if (fen.length - fen_index < 25)
+            return new Error("! fen too short");
+        for (let i = 0; i < 10; ++i) {
+            if (!"12345678PNBRQKpnbrqk/".includes(fen[fen_index + i]))
+                return new Error("! invalid char");
         }
 
-        let enpassant : Option<[number, number]> = null;
-        if(attrs[2] != "-") {
-            enpassant = [0, 0];
-            enpassant[1] = parseInt(attrs[2][0], 36) - 10;
-            enpassant[0] = parseInt(attrs[2][1])-1;
-        }
-        return new Board(board, attrs[1], enpassant);
-    }
-
-    private stringCheck(text: string, begin: number, end: number) {
-
-        let escape = false;
-        let res = {
-            numberQuotes: 0,
-            lastQuoteIdx: 0,
-            firstQuoteIdx: 0,
-        }
-        for(let i : number = begin; i < end; i++) {
-            if(escape) {
-                escape = false;
-                continue;
+        // field 1 : piece placement
+        let pieces_per_rank = 0;
+        let rank = 1;
+        let square_index: number = 0;
+        while (true) {
+            if (fen_index >= fen.length)
+                return new Error("! missing fields");
+            if (square_index >= 64) {
+                if (fen[fen_index] == ' ') {
+                    break;
+                } else if (fen[fen_index] == '/')
+                    return new Error("too many ranks");
+                else return new Error("too many pieces on rank 8");
             }
-            if(text[i] == '\\') {
-                escape = true
-            } else if(text[i] == '"') {
-                res.lastQuoteIdx = i;
-                if(res.numberQuotes == 0) res.firstQuoteIdx = i;
-                res.numberQuotes++;
+            const piece = fen[fen_index];
+            if ("12345678".includes(piece)) {
+                fen_index += 1;
+                square_index += Number(piece);
+                pieces_per_rank += Number(piece);
+            } else if ("PNBRQKpnbrqk".includes(piece)) {
+                const color: PieceColor = this.isUpper(piece) ?
+                    PieceColor.WHITE : PieceColor.BLACK;
+                board.pieces[square_index] = Lense.charToPiece(piece.toUpperCase(), color);
+                fen_index += 1;
+                square_index += 1;
+                pieces_per_rank += 1;
+            } else if (piece == '/') {
+                // assert square_index on file a
+                if (pieces_per_rank < 8)
+                    return new Error(`missing ${8 - pieces_per_rank} piece(s) on rank ${rank}`);
+                else if (pieces_per_rank > 8)
+                    return new Error(`${pieces_per_rank - 8} extra piece(s) on rank ${rank}`);
+                fen_index += 1;
+                pieces_per_rank = 0;
+                rank += 1;
+            } else if (piece == ' ') {
+                if (pieces_per_rank < 8)
+                    return new Error(`missing ${8 - pieces_per_rank} piece(s) on rank ${rank}`);
+                else if (pieces_per_rank > 8)
+                    return new Error(`${pieces_per_rank - 8} extra piece(s) on rank ${rank}`);
+                return new Error(`missing ${8 - rank} rank(s)`);
             }
+            else return new Error("invalid piece: " + piece);
         }
-        return res;
+        while (fen_index < fen.length && fen[fen_index] == ' ')
+            fen_index += 1;
+        if (fen_index >= fen.length)
+            return new Error("missing fields: side to move, castling rights, enpassant, fifty move counter, full move counter");
+
+        // -- field 2 : side to move
+        if (fen[fen_index] != 'w' && fen[fen_index] != 'b')
+            return new Error("unrecognized side to move: " + fen[fen_index]);
+        fen_index += 1;
+
+        while (fen_index < fen.length && fen[fen_index] == ' ')
+            fen_index += 1;
+        if (fen_index >= fen.length)
+            return new Error("missing fields: castling rights, enpassant, fifty move counter, full move counter");
+
+        // -- field 3 : castling rights
+        if (fen[fen_index] == '-')
+            fen_index += 1;
+        else {
+            let end = fen_index;
+            while (end < fen.length && fen[end] != ' ') {
+                if ("kqKQ".includes(fen[end]))
+                    end += 1;
+                else return new Error("unrecognized castling right: " + fen[end]);
+            }
+            board.castling = fen.substring(fen_index, end);
+            fen_index = end;
+        }
+
+        while (fen_index < fen.length && fen[fen_index] == ' ')
+            fen_index += 1;
+        if (fen_index >= fen.length)
+            return new Error("missing fields: enpassant, fifty move counter, full move counter");
+
+        // -- field 4 : En Passant target
+        if (fen[fen_index] == '-')
+            fen_index += 1;
+        else {
+            if (fen_index >= fen.length - 1)
+                return new Error("missing enpassant rank");
+            if (!"abcdefgh".includes(fen[fen_index]))
+                return new Error("invalid enpassant file: " + fen[fen_index]);
+            if (!"12345678".includes(fen[fen_index + 1]))
+                return new Error("invalid enpassant rank: " + fen[fen_index + 1]);
+            board.enpassant = [0,0];
+            board.enpassant[0] = parseInt(fen[fen_index], 36) - 10;
+            board.enpassant[1] = parseInt(fen[fen_index + 1]) - 1;
+            fen_index += 2;
+        }
+
+        while (fen_index < fen.length && fen[fen_index] == ' ')
+            fen_index += 1;
+        if (fen_index >= fen.length)
+            return new Error("missing fields: fifty move counter, full move counter");
+
+        // -- field 5 : fifty move counter
+        let end = fen_index;
+        while (end < fen.length && fen[end] != ' ')
+            end += 1;
+        const fifty_count = parseInt(fen.substring(fen_index, end), 10);
+        if (fifty_count != 0 && !fifty_count)
+            return new Error("invalid fifty move counter: " + fen.substring(fen_index, end));
+        fen_index = end;
+
+        while (fen_index < fen.length && fen[fen_index] == ' ')
+            fen_index += 1;
+        if (fen_index >= fen.length)
+            return new Error("missing field: full move counter");
+
+        // -- field 5 : full move counter
+        end = fen_index;
+        while (end < fen.length && fen[end] != ' ')
+            end += 1;
+        const full_count = parseInt(fen.substring(fen_index, end), 10);
+        if (full_count != 0 && !full_count)
+            return new Error("invalid full move counter: " + fen.substring(fen_index, end));
+
+        return board;
     }
 
     private getHoveredString(line: string, first: number, position: number): Result<string> {
-        // check if we are inside string (must have an odd number of valid " before position)
-        let res = this.stringCheck(line, first, position);
-        // if it is even, nothing happens (we are not inside a string)
-        if(!(res.numberQuotes & 1)) {
-            return new Error("not inside string");
+        let char = '\0';
+        let begin = -1;
+        for (let i = position; i > first; --i) {
+            if (line[i] == '\'' || line[i] == '"') {
+                char = line[i];
+                begin = i;
+                break;
+            }
         }
-        // if we reach here, it is odd, and we are inside a string
-        // check where the string ends
-        let beginStr = res.lastQuoteIdx+1;
-        res = this.stringCheck(line, position, line.length);
-        // we won't accept multine strings here!
-        if(!res.firstQuoteIdx) {
-            return new Error("not inside string");
+        if (begin == -1)
+            return new Error("! not inside string");
+
+        let end = -1;
+        for (let i = position; i < line.length; ++i) {
+            if (line[i] == char) {
+                end = i;
+                break;
+            }
         }
-        let endStr = res.firstQuoteIdx;
-        return line.substring(beginStr, endStr);
+        if (end == -1)
+            return new Error("! not inside string");
+
+        return line.substring(begin + 1, end);
     }
 
     public strToBoard(document: TextDocument, position: Position): Result<Board> {
@@ -349,6 +443,6 @@ export class Lense {
         if(ok(str)) {
             return this.parseFen(str);
         }
-        return new Error("couldn't get board");
+        return new Error("! couldn't get board");
     }
 }
